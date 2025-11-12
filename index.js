@@ -57,7 +57,7 @@ const run = async () => {
 
             //challenge api create
 
-            //public challenge all post
+            // //public challenge all post
             app.get("/api/challenges", async (req, res) => {
                   try {
                         const cursor = challengeCol.find();
@@ -69,24 +69,6 @@ const run = async () => {
                   }
             });
 
-            //private all challenge post
-            app.get("/api/challenges", verifyFireBaseToken, async (req, res) => {
-                  const email = req.token_email || req.query.email;
-                  const query = {};
-                  console.log(email);
-                  
-                  try {
-                        if (email) {
-                              query.createdBy = email;
-                              
-                        }
-                        const cursor = challengeCol.find(query);
-                        const result = await cursor.toArray();
-                        res.send(result);
-                  } catch (error) {
-                        res.status(500).send({message: 'Forbidden access'})
-                  }
-            });
             app.get("/api/challenges/:id", async (req, res) => {
                   const id = req.params.id;
 
@@ -96,9 +78,28 @@ const run = async () => {
                   res.send(result);
             });
 
+            // //private all challenge post
+            // app.get("/api/challenges", verifyFireBaseToken, async (req, res) => {
+            //       const email = req.token_email || req.query.email;
+            //       const query = {};
+            //       console.log(query);
+            //       console.log(email);
+
+            //       try {
+            //             if (email) {
+            //                   query.createdBy = email;
+            //             }
+            //             const cursor = userChallengeCol.find(query);
+            //             const result = await cursor.toArray();
+            //             res.send(result);
+            //       } catch (error) {
+            //             res.status(500).send({ message: "Forbidden access" });
+            //       }
+            // });
+
             //post && patch & delete api challenge
             app.post("/api/challenges", verifyFireBaseToken, async (req, res) => {
-                  const creatorEmail = req.token_email || req.query.email;
+                  const email = req.token_email || req.query.email;
                   try {
                         const newChallenge = {
                               ...req.body,
@@ -110,7 +111,7 @@ const run = async () => {
                                     currentProgress: 0,
                                     percentage: 0,
                               },
-                              createdBy: creatorEmail,
+                              createdBy: email,
 
                               createdAt: new Date(),
                         };
@@ -126,7 +127,7 @@ const run = async () => {
                         const result = await challengeCol.insertOne(newChallenge);
 
                         const userChallenge = {
-                              email: req.token_email,
+                              email,
                               challengeId: result.insertedId.toString(),
                               challengeTitle: newChallenge.title,
                               category: newChallenge.category,
@@ -146,6 +147,61 @@ const run = async () => {
                         res.status(500).send({ error: "Failed to create challenge" });
                   }
             });
+
+            // challenges join
+
+            app.post("/api/challenges/join/:id", verifyFireBaseToken, async (req, res) => {
+                  const email = req.token_email;
+                  const challengeId = req.params.id;
+                  try {
+                        const challenge = await challengeCol.findOne({ _id: new ObjectId(challengeId) });
+                        if (!challenge) {
+                              return res.status(404).send({ message: "Challenge Not Found" });
+                        }
+                        const exitingUser = await userChallengeCol.findOne({ email, challengeId });
+                        if (exitingUser) return res.status(400).send({ message: "Already joined" });
+                        await userChallengeCol.insertOne({
+                              email,
+                              challengeId,
+                              challengeTitle: challenge.title,
+                              category: challenge.category,
+                              status: "joined",
+                              role: "participant",
+                              joinDate: new Date(),
+                              progress: 0,
+                        });
+
+                        await challengeCol.updateOne({ _id: new ObjectId(challengeId) }, { $inc: { participants: 1 } });
+
+                        res.send({ success: true, message: "Joined challenge successfully" });
+                  } catch (error) {
+                        res.status(500).send({ message: "Failed to join challenge" });
+                  }
+            });
+
+            app.get("/api/user-challenges", verifyFireBaseToken, async (req, res) => {
+                  try {
+                        const email = req.token_email;
+                        const userChallenges = await userChallengeCol.find({ email }).toArray();
+                        res.send(userChallenges);
+                  } catch (error) {
+                        res.status(500).send({ message: "Failed to fetch user challenges" });
+                  }
+            });
+
+            // /my-activities/:id — single activity (user-specific)
+            app.get("/api/user-challenges/:id", verifyFireBaseToken, async (req, res) => {
+                  try {
+                        const id = req.params.id;
+                        const email = req.token_email;
+                        const challenge = await userChallengeCol.findOne({ challengeId: id, email });
+                        if (!challenge) return res.status(404).send({ message: "Not found" });
+                        res.send(challenge);
+                  } catch (error) {
+                        res.status(500).send({ message: "Failed to fetch user challenge" });
+                  }
+            });
+
             app.patch("/api/challenges/:id", async (req, res) => {
                   const id = req.params.id;
                   const updatePost = req.body;
