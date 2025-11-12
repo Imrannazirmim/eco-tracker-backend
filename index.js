@@ -69,53 +69,6 @@ const run = async () => {
                   }
             });
 
-            // //private all challenge post
-            // app.get("/api/user-challenges", verifyFireBaseToken, async (req, res) => {
-            //       try {
-            //             const email = req.token_email || req.query.email;
-
-            //             if (!email) {
-            //                   return res.status(400).send({ message: "Email is required" });
-            //             }
-
-            //             // Join user_challenges with challenges collection
-            //             const userChallenges = await userChallengeCol
-            //                   .aggregate([
-            //                         { $match: { email } },
-            //                         {
-            //                               $lookup: {
-            //                                     from: "challenges",
-            //                                     localField: "challengeId",
-            //                                     foreignField: "_id",
-            //                                     as: "challengeInfo",
-            //                               },
-            //                         },
-            //                         { $unwind: { path: "$challengeInfo", preserveNullAndEmptyArrays: true } },
-            //                         {
-            //                               $project: {
-            //                                     _id: 1,
-            //                                     email: 1,
-            //                                     role: 1,
-            //                                     status: 1,
-            //                                     progress: 1,
-            //                                     joinDate: 1,
-            //                                     "challengeInfo.title": 1,
-            //                                     "challengeInfo.category": 1,
-            //                                     "challengeInfo.description": 1,
-            //                                     "challengeInfo.image": 1,
-            //                                     "challengeInfo.createdBy": 1,
-            //                               },
-            //                         },
-            //                   ])
-            //                   .toArray();
-
-            //             res.send(userChallenges);
-            //       } catch (error) {
-            //             console.error("Error fetching user challenges:", error);
-            //             res.status(500).send({ message: "Failed to fetch user challenges" });
-            //       }
-            // });
-
             app.get("/api/challenges/:id", async (req, res) => {
                   const { id } = req.params;
                   if (!ObjectId.isValid(id)) {
@@ -213,20 +166,37 @@ const run = async () => {
                   }
             });
 
-            // app.get("/api/", verifyFireBaseToken, async (req, res) => {
-            //       try {
-            //             const email = req.token_email || req.query.email;
-            //             const query = {};
-            //             if (email) {
-            //                   query.email = email;
-            //             }
-            //             const cursor = userChallengeCol.find(query);
-            //             const result = await cursor.toArray();
-            //             res.send(result);
-            //       } catch (error) {
-            //             res.status(500).send({ message: "Failed to Fetch User Challenges" });
-            //       }
-            // });
+            app.post("/api/challenges/join/:id", verifyFireBaseToken, async (req, res) => {
+                  const email = req.token_email;
+                  const joinId = req.params.id;
+                  try {
+                        const joinChallenge = await challengeCol.findOne({ _id: new ObjectId(joinId) });
+                        if (!joinChallenge) {
+                              return res.status(404).send({ message: "Challenge Not Found" });
+                        }
+                        const exitingUser = await userChallengeCol.findOne({
+                              userId: email,
+                              challengeId: challengeId,
+                        });
+                        if (exitingUser) {
+                              return res.status(400).send({ message: "Already joined this challenge" });
+                        }
+                        await userChallengeCol.insertOne({
+                              userId: email,
+                              email: email,
+                              challengeId: challengeId,
+                              status: "Not Started",
+                              progress: 0,
+                              role: "participant",
+                              joinDate: new Date(),
+                        });
+                        await challengeCol.updateOne({ _id: new ObjectId(challengeId) }, { $inc: { participants: 1 } });
+
+                        res.send();
+                  } catch (error) {
+                        res.status(500).send({ message: "Failed to join challenge" });
+                  }
+            });
 
             await client.db("admin").command({ ping: 1 });
       } catch (error) {
