@@ -219,6 +219,34 @@ app.get("/api/user-challenges", verifyFireBaseToken, async (req, res) => {
       }
 });
 
+app.patch("/api/user-challenges/:id", verifyFireBaseToken, async (req, res) => {
+      const id = req.params.id;
+      if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid user challenge ID" });
+      }
+
+      try {
+            const { db } = await connectToDatabase();
+            const userChallengeCol = db.collection("user_challenges");
+            const query = { _id: new ObjectId(id) };
+            const update = { $set: req.body };
+            const result = await userChallengeCol.updateOne(query, update);
+
+            if (result.matchedCount === 0) {
+                  return res.status(404).json({ message: "User challenge not found" });
+            }
+
+            res.json({
+                  success: true,
+                  message: "Progress updated successfully",
+                  modifiedCount: result.modifiedCount,
+            });
+      } catch (error) {
+            console.error("Error updating user challenge:", error);
+            res.status(500).json({ message: "Failed to update progress" });
+      }
+});
+
 app.post("/api/challenges/join/:id", verifyFireBaseToken, async (req, res) => {
       const email = req.token_email;
       const joinId = req.params.id;
