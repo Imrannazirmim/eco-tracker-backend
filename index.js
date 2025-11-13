@@ -64,7 +64,7 @@ async function connectToDatabase() {
       const client = new MongoClient(url, {
             serverApi: {
                   version: ServerApiVersion.v1,
-                  strict: true,
+                  strict: false,
                   deprecationErrors: true,
             },
       });
@@ -386,39 +386,37 @@ app.post("/api/tips", verifyFireBaseToken, async (req, res) => {
       }
 });
 
-
 app.get("/api/stats", async (req, res) => {
       try {
             const { db } = await connectToDatabase();
-            
+
             const challengesCol = db.collection("challenges");
             const challengesCount = await challengesCol.countDocuments();
-            
+
             const userChallengeCol = db.collection("user_challenges");
             const uniqueUsers = await userChallengeCol.distinct("email");
             const usersCount = uniqueUsers.length;
-            
-       
+
             const challengesData = await challengesCol.find().toArray();
             const totalParticipants = challengesData.reduce((sum, challenge) => {
                   return sum + (challenge.participants || 0);
             }, 0);
-            
+
             const treesPlanted = challengesData.reduce((sum, challenge) => {
                   if (challenge.impactMetric === "trees planted" && challenge.communityGoal) {
                         return sum + (challenge.communityGoal.currentProgress || 0);
                   }
                   return sum;
             }, 0);
-            
+
             const co2Reduced = totalParticipants * 50;
-            
+
             const tipsCol = db.collection("tips");
             const tipsCount = await tipsCol.countDocuments();
-            
+
             const eventsCol = db.collection("events");
             const eventsCount = await eventsCol.countDocuments();
-            
+
             res.json({
                   success: true,
                   stats: {
@@ -428,14 +426,14 @@ app.get("/api/stats", async (req, res) => {
                         treesPlanted: treesPlanted,
                         tips: tipsCount,
                         events: eventsCount,
-                        totalParticipants: totalParticipants
-                  }
+                        totalParticipants: totalParticipants,
+                  },
             });
       } catch (error) {
-            res.status(500).json({ 
+            res.status(500).json({
                   success: false,
                   message: "Failed to fetch stats",
-                  error: error.message 
+                  error: error.message,
             });
       }
 });
