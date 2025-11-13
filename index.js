@@ -57,7 +57,6 @@ const run = async () => {
 
             //challenge api create
 
-            // //public challenge all post
             app.get("/api/challenges", async (req, res) => {
                   try {
                         const cursor = challengeCol.find();
@@ -165,36 +164,262 @@ const run = async () => {
                         res.status(500).send({ message: "Forbidden access" });
                   }
             });
-
             app.post("/api/challenges/join/:id", verifyFireBaseToken, async (req, res) => {
                   const email = req.token_email;
                   const joinId = req.params.id;
+
                   try {
                         const joinChallenge = await challengeCol.findOne({ _id: new ObjectId(joinId) });
                         if (!joinChallenge) {
                               return res.status(404).send({ message: "Challenge Not Found" });
                         }
-                        const exitingUser = await userChallengeCol.findOne({
-                              userId: email,
-                              challengeId: challengeId,
+
+                        const existingUser = await userChallengeCol.findOne({
+                              email: email,
+                              challengeId: joinId,
                         });
-                        if (exitingUser) {
+
+                        if (existingUser) {
                               return res.status(400).send({ message: "Already joined this challenge" });
                         }
+
                         await userChallengeCol.insertOne({
                               userId: email,
                               email: email,
-                              challengeId: challengeId,
+                              challengeId: joinId,
+                              challengeTitle: joinChallenge.title,
+                              imageUrl: joinChallenge.imageUrl,
+                              category: joinChallenge.category,
                               status: "Not Started",
                               progress: 0,
                               role: "participant",
                               joinDate: new Date(),
                         });
-                        await challengeCol.updateOne({ _id: new ObjectId(challengeId) }, { $inc: { participants: 1 } });
 
-                        res.send();
+                        await challengeCol.updateOne({ _id: new ObjectId(joinId) }, { $inc: { participants: 1 } });
+
+                        res.send({
+                              success: true,
+                              message: "Successfully joined challenge",
+                        });
                   } catch (error) {
+                        console.error("Error joining challenge:", error);
                         res.status(500).send({ message: "Failed to join challenge" });
+                  }
+            });
+
+
+            // Get all events
+            app.get("/api/events", async (req, res) => {
+                  try {
+                        const query = {};
+
+                        // Filter for upcoming events if requested
+                        if (req.query.upcoming === "true") {
+                              query.date = { $gte: new Date() };
+                        }
+
+                        const cursor = eventsCol.find(query).sort({ date: 1 });
+                        const result = await cursor.toArray();
+                        res.send(result);
+                  } catch (error) {
+                        console.error("Error fetching events:", error);
+                        res.status(500).send({ message: "Failed to fetch events" });
+                  }
+            });
+
+            // Get single event
+            app.get("/api/events/:id", async (req, res) => {
+                  const { id } = req.params;
+                  if (!ObjectId.isValid(id)) {
+                        return res.status(400).json({ message: "Invalid event ID" });
+                  }
+
+                  try {
+                        const query = { _id: new ObjectId(id) };
+                        const result = await eventsCol.findOne(query);
+
+                        if (!result) {
+                              return res.status(404).json({ message: "Event not found" });
+                        }
+
+                        res.json(result);
+                  } catch (error) {
+                        console.error("Error fetching event:", error);
+                        res.status(500).send({ message: "Failed to fetch event" });
+                  }
+            });
+
+            // Create event
+            app.post("/api/events", verifyFireBaseToken, async (req, res) => {
+                  try {
+                        const newEvent = {
+                              ...req.body,
+                              attendees: req.body.attendees || 0,
+                              createdBy: req.token_email,
+                              createdAt: new Date(),
+                        };
+
+                        const result = await eventsCol.insertOne(newEvent);
+                        res.send({
+                              success: true,
+                              eventId: result.insertedId,
+                              message: "Event created successfully",
+                        });
+                  } catch (error) {
+                        console.error("Error creating event:", error);
+                        res.status(500).send({ error: "Failed to create event" });
+                  }
+            });
+
+            // Update event
+            app.patch("/api/events/:id", verifyFireBaseToken, async (req, res) => {
+                  const id = req.params.id;
+
+                  if (!ObjectId.isValid(id)) {
+                        return res.status(400).json({ message: "Invalid event ID" });
+                  }
+
+                  try {
+                        const query = { _id: new ObjectId(id) };
+                        const update = { $set: req.body };
+                        const result = await eventsCol.updateOne(query, update);
+
+                        if (result.matchedCount === 0) {
+                              return res.status(404).json({ message: "Event not found" });
+                        }
+
+                        res.send(result);
+                  } catch (error) {
+                        console.error("Error updating event:", error);
+                        res.status(500).send({ message: "Failed to update event" });
+                  }
+            });
+
+            // Delete event
+            app.delete("/api/events/:id", verifyFireBaseToken, async (req, res) => {
+                  const id = req.params.id;
+
+                  if (!ObjectId.isValid(id)) {
+                        return res.status(400).json({ message: "Invalid event ID" });
+                  }
+
+                  try {
+                        const query = { _id: new ObjectId(id) };
+                        const result = await eventsCol.deleteOne(query);
+
+                        if (result.deletedCount === 0) {
+                              return res.status(404).json({ message: "Event not found" });
+                        }
+
+                        res.send(result);
+                  } catch (error) {
+                        console.error("Error deleting event:", error);
+                        res.status(500).send({ message: "Failed to delete event" });
+                  }
+            });
+
+
+            // Get all tips
+            app.get("/api/tips", async (req, res) => {
+                  try {
+                        const cursor = tipsCol.find().sort({ createdAt: -1 });
+                        const result = await cursor.toArray();
+                        res.send(result);
+                  } catch (error) {
+                        console.error("Error fetching tips:", error);
+                        res.status(500).send({ message: "Failed to fetch tips" });
+                  }
+            });
+
+            // Get single tip
+            app.get("/api/tips/:id", async (req, res) => {
+                  const { id } = req.params;
+                  if (!ObjectId.isValid(id)) {
+                        return res.status(400).json({ message: "Invalid tip ID" });
+                  }
+
+                  try {
+                        const query = { _id: new ObjectId(id) };
+                        const result = await tipsCol.findOne(query);
+
+                        if (!result) {
+                              return res.status(404).json({ message: "Tip not found" });
+                        }
+
+                        res.json(result);
+                  } catch (error) {
+                        console.error("Error fetching tip:", error);
+                        res.status(500).send({ message: "Failed to fetch tip" });
+                  }
+            });
+
+            // Create tip
+            app.post("/api/tips", verifyFireBaseToken, async (req, res) => {
+                  try {
+                        const newTip = {
+                              ...req.body,
+                              likes: req.body.likes || 0,
+                              createdBy: req.token_email,
+                              createdAt: new Date(),
+                        };
+
+                        const result = await tipsCol.insertOne(newTip);
+                        res.send({
+                              success: true,
+                              tipId: result.insertedId,
+                              message: "Tip created successfully",
+                        });
+                  } catch (error) {
+                        console.error("Error creating tip:", error);
+                        res.status(500).send({ error: "Failed to create tip" });
+                  }
+            });
+
+            // Update tip
+            app.patch("/api/tips/:id", verifyFireBaseToken, async (req, res) => {
+                  const id = req.params.id;
+
+                  if (!ObjectId.isValid(id)) {
+                        return res.status(400).json({ message: "Invalid tip ID" });
+                  }
+
+                  try {
+                        const query = { _id: new ObjectId(id) };
+                        const update = { $set: req.body };
+                        const result = await tipsCol.updateOne(query, update);
+
+                        if (result.matchedCount === 0) {
+                              return res.status(404).json({ message: "Tip not found" });
+                        }
+
+                        res.send(result);
+                  } catch (error) {
+                        console.error("Error updating tip:", error);
+                        res.status(500).send({ message: "Failed to update tip" });
+                  }
+            });
+
+            // Delete tip
+            app.delete("/api/tips/:id", verifyFireBaseToken, async (req, res) => {
+                  const id = req.params.id;
+
+                  if (!ObjectId.isValid(id)) {
+                        return res.status(400).json({ message: "Invalid tip ID" });
+                  }
+
+                  try {
+                        const query = { _id: new ObjectId(id) };
+                        const result = await tipsCol.deleteOne(query);
+
+                        if (result.deletedCount === 0) {
+                              return res.status(404).json({ message: "Tip not found" });
+                        }
+
+                        res.send(result);
+                  } catch (error) {
+                        console.error("Error deleting tip:", error);
+                        res.status(500).send({ message: "Failed to delete tip" });
                   }
             });
 
