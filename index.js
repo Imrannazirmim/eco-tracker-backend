@@ -363,6 +363,148 @@ app.post("/api/events", verifyFireBaseToken, async (req, res) => {
       }
 });
 
+app.patch("/api/events/:id", verifyFireBaseToken, async (req, res) => {
+      const id = req.params.id;
+      if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid event ID" });
+      }
+
+      try {
+            const { db } = await connectToDatabase();
+            const eventsCol = db.collection("events");
+
+            // Check if user is the creator of the event
+            const existingEvent = await eventsCol.findOne({ _id: new ObjectId(id) });
+            if (!existingEvent) {
+                  return res.status(404).json({ message: "Event not found" });
+            }
+
+            if (existingEvent.createdBy !== req.token_email) {
+                  return res.status(403).json({ message: "Unauthorized to update this event" });
+            }
+
+            const updateData = {
+                  ...req.body,
+                  updatedAt: new Date(),
+            };
+
+            delete updateData.attendees;
+            delete updateData.createdBy;
+            delete updateData.createdAt;
+
+            const query = { _id: new ObjectId(id) };
+            const update = { $set: updateData };
+            const result = await eventsCol.updateOne(query, update);
+
+            if (result.matchedCount === 0) {
+                  return res.status(404).json({ message: "Event not found" });
+            }
+
+            res.json({
+                  success: true,
+                  message: "Event updated successfully",
+                  modifiedCount: result.modifiedCount,
+            });
+      } catch (error) {
+            console.error("Error updating event:", error);
+            res.status(500).json({
+                  message: "Failed to update event",
+                  error: error.message,
+            });
+      }
+});
+
+app.delete("/api/events/:id", verifyFireBaseToken, async (req, res) => {
+      const id = req.params.id;
+      if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid event ID" });
+      }
+
+      try {
+            const { db } = await connectToDatabase();
+            const eventsCol = db.collection("events");
+
+            const existingEvent = await eventsCol.findOne({ _id: new ObjectId(id) });
+            if (!existingEvent) {
+                  return res.status(404).json({ message: "Event not found" });
+            }
+
+            if (existingEvent.createdBy !== req.token_email) {
+                  return res.status(403).json({ message: "Unauthorized to delete this event" });
+            }
+
+            const query = { _id: new ObjectId(id) };
+            const result = await eventsCol.deleteOne(query);
+
+            if (result.deletedCount === 0) {
+                  return res.status(404).json({ message: "Event not found" });
+            }
+
+            res.json({
+                  success: true,
+                  message: "Event deleted successfully",
+            });
+      } catch (error) {
+            console.error("Error deleting event:", error);
+            res.status(500).json({
+                  message: "Failed to delete event",
+                  error: error.message,
+            });
+      }
+});
+
+app.post("/api/events/join/:id", verifyFireBaseToken, async (req, res) => {
+      const email = req.token_email;
+      const eventId = req.params.id;
+
+      if (!ObjectId.isValid(eventId)) {
+            return res.status(400).json({ message: "Invalid event ID" });
+      }
+
+      try {
+            const { db } = await connectToDatabase();
+            const eventsCol = db.collection("events");
+            const userEventsCol = db.collection("user_events"); // You might need to create this collection
+
+            const event = await eventsCol.findOne({ _id: new ObjectId(eventId) });
+            if (!event) {
+                  return res.status(404).json({ message: "Event not found" });
+            }
+
+            if (event.attendees >= event.maxParticipants) {
+                  return res.status(400).json({ message: "Event is full" });
+            }
+
+            const existingJoin = await userEventsCol.findOne({
+                  email: email,
+                  eventId: eventId,
+            });
+
+            if (existingJoin) {
+                  return res.status(400).json({ message: "Already joined this event" });
+            }
+
+            await userEventsCol.insertOne({
+                  email: email,
+                  eventId: eventId,
+                  joinedAt: new Date(),
+            });
+
+            await eventsCol.updateOne({ _id: new ObjectId(eventId) }, { $inc: { attendees: 1 } });
+
+            res.json({
+                  success: true,
+                  message: "Successfully joined event",
+            });
+      } catch (error) {
+            console.error("Error joining event:", error);
+            res.status(500).json({
+                  message: "Failed to join event",
+                  error: error.message,
+            });
+      }
+});
+
 app.get("/api/tips", async (req, res) => {
       try {
             const { db } = await connectToDatabase();
