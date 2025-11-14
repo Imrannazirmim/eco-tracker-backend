@@ -242,7 +242,6 @@ app.patch("/api/user-challenges/:id", verifyFireBaseToken, async (req, res) => {
                   modifiedCount: result.modifiedCount,
             });
       } catch (error) {
-            console.error("Error updating user challenge:", error);
             res.status(500).json({ message: "Failed to update progress" });
       }
 });
@@ -275,10 +274,17 @@ app.post("/api/challenges/join/:id", verifyFireBaseToken, async (req, res) => {
                   email: email,
                   challengeId: joinId,
                   challengeTitle: joinChallenge.title,
+                  description: joinChallenge.description,
                   imageUrl: joinChallenge.imageUrl,
                   category: joinChallenge.category,
+                  secondaryTag: joinChallenge.secondaryTag,
+                  startDate: joinChallenge.startDate,
+                  endDate: joinChallenge.endDate,
+                  duration: joinChallenge.duration,
+                  participants: joinChallenge.participants,
                   status: "Not Started",
                   progress: 0,
+                  percentage: 0,
                   role: "participant",
                   joinDate: new Date(),
             });
